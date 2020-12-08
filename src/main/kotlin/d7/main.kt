@@ -19,7 +19,7 @@ fun main() {
         for(match in contentRegex.findAll(contentStr)) {
             val (numStr, contentColor) = match.destructured
             val content = bags[contentColor]
-            curr.contains[content] = numStr.toInt()
+            curr.contains.add(Quantity(content, numStr.toInt()))
             content.parents.add(curr)
         }
     }
@@ -51,14 +51,16 @@ fun main() {
     printTime()
 }
 
+data class Quantity(val bag: Bag, val num: Int)
+
 class Bag(val color: String) {
-    val contains = mutableMapOf<Bag, Int>()
+    val contains = mutableListOf<Quantity>()
     val parents = mutableListOf<Bag>()
 
     var _weight = 0L
     val weight: Long get() {
         if(_weight == 0L) {
-            _weight = 1L + contains.entries.sumOf { (child, num) -> child.weight * num }
+            _weight = 1L + contains.sumOf { (child, num) -> child.weight * num }
         }
         return _weight
     }
