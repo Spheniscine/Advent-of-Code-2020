@@ -45,23 +45,6 @@ fun main() {
 
     markTime()
 
-    val vis = HashSet<Bag>()
-    val stk = mutableListOf(root)
-
-    while(stk.isNotEmpty()) {
-        val curr = stk.removeLast()
-
-        if(vis.add(curr)) {
-            stk.add(curr)
-            for(child in curr.contains.keys) stk.add(child)
-        } else {
-            curr.weight = 1
-            for((child, num) in curr.contains) {
-                curr.weight += child.weight * num
-            }
-        }
-    }
-
     val ans2 = root.weight-1
 
     println("Part 2: $ans2")
@@ -72,5 +55,11 @@ class Bag(val color: String) {
     val contains = mutableMapOf<Bag, Int>()
     val parents = mutableListOf<Bag>()
 
-    var weight = 0L
+    var _weight = 0L
+    val weight: Long get() {
+        if(_weight == 0L) {
+            _weight = 1L + contains.entries.sumOf { (child, num) -> child.weight * num }
+        }
+        return _weight
+    }
 }
