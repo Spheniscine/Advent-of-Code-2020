@@ -8,7 +8,7 @@ import kotlin.random.Random
 private val input by lazyInput(9, "gmail")
 
 fun main() {
-    println("--- Day 9 ---")
+    println("--- Day 9: Encoding Error ---")
     markTime()
     
     val lines = input.lines()
