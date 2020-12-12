@@ -35,6 +35,13 @@ data class Vec2(val x: Int, val y: Int) {
         y.compareTo(b.y).let { if(it != 0) return it }
         return x.compareTo(b.x)
     }
+
+    fun rotate(rightAngles: Int) = when(rightAngles and 3) {
+        0 -> this
+        1 -> Vec2(-y, x)
+        2 -> -this
+        else -> Vec2(y, -x)
+    }
 }
 
 enum class Dir2(val vec: Vec2) {
@@ -70,6 +77,9 @@ enum class Dir2(val vec: Vec2) {
 
     fun opposite() = values[ordinal + 2 and 3]
     inline operator fun unaryMinus() = opposite()
+
+    operator fun plus(rightAngles: Int) = values[ordinal + rightAngles and 3]
+    operator fun minus(rightAngles: Int) = values[ordinal - rightAngles and 3]
 }
 
 operator fun <V> Map<Vec2, V>.get(x: Int, y: Int) = get(Vec2(x, y))
