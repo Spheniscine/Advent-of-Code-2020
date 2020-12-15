@@ -5,7 +5,7 @@ import commons.*
 private val input by lazyInput(13, "gmail")
 
 fun main() {
-    println("--- Day 13 ---")
+    println("--- Day 13: Shuttle Search ---")
     markTime()
 
     val lines = input.lines()
