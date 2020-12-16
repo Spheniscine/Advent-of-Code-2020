@@ -7,7 +7,7 @@ import kotlin.random.Random
 private val input by lazyInput(15, "gmail")
 
 fun main() {
-    println("--- Day 15 ---")
+    println("--- Day 15: Rambunctious Recitation ---")
     markTime()
 
     val A = input.split(',').map { it.toInt() }

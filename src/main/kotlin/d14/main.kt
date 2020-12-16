@@ -70,16 +70,15 @@ fun main() {
                 val i = iStr.toLong() or uncUpMask
                 val v = vStr.toLong()
 
-                upMask = 0L
-                downMask = floatMask.inv()
+                upMask = floatMask
+                downMask = -1L
 
                 while(true) {
                     mem[i or upMask and downMask] = v
 
-                    if(upMask == floatMask) break
+                    if(upMask == 0L) break
 
-                    val low = (floatMask xor upMask).takeLowestOneBit()
-                    upMask = upMask or low and -low
+                    upMask = upMask - 1 and floatMask
                     downMask = floatMask.inv() or upMask
                 }
             }
