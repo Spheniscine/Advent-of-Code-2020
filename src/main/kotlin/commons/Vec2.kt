@@ -29,7 +29,7 @@ data class Vec2(val x: Int, val y: Int) {
     // cross product
     infix fun cross(b: Vec2) = x.toLong() * b.y - y.toLong() * b.x
 
-    //override fun hashCode(): Int = x.bitConcat(y).hash().toInt()
+    override fun hashCode(): Int = x.bitConcat(y).hash().toInt()
 
     fun compareReadingOrder(b: Vec2): Int {
         y.compareTo(b.y).let { if(it != 0) return it }
