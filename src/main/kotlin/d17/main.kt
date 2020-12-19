@@ -46,12 +46,12 @@ fun Set<Vec3>.next(): Set<Vec3> {
         }
     }
 
-    val res = HashSet<Vec3>()
-    cnt.forEach { (vec, c) ->
-        if(c == 3 || c == 4 && vec in this) res.add(vec)
+    val ite = cnt.iterator()
+    for((vec, c) in ite) {
+        if(!(c == 3 || c == 4 && vec in this)) ite.remove()
     }
 
-    return res
+    return cnt.keys
 }
 
 @JvmName("next4")
@@ -63,14 +63,15 @@ fun Set<Vec4>.next(): Set<Vec4> {
         }
     }
 
-    val res = HashSet<Vec4>()
-    cnt.forEach { (vec, c) ->
-        if(c == 3 || c == 4 && vec in this) res.add(vec)
+    val ite = cnt.iterator()
+    for((vec, c) in ite) {
+        if(!(c == 3 || c == 4 && vec in this)) ite.remove()
     }
 
-    return res
+    return cnt.keys
 }
 
+@Suppress("EqualsOrHashCode")
 data class Vec4(val x: Int, val y: Int, val z: Int, val w: Int) {
     override fun hashCode(): Int = hash(x.bitConcat(y), z.bitConcat(w)).toInt()
 }
