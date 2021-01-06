@@ -56,6 +56,10 @@ infix fun Long.divCeil(other: Long) =
 
 inline infix fun Long.divFloor(other: Long) = Math.floorDiv(this, other)
 
+// Double can represent every Int value exactly
+fun Int.sqrtFloor() = sqrt(toDouble()).toInt()
+fun Int.sqrtCeil() = ceil(sqrt(toDouble())).toInt()
+
 // Solves system: x = a1 (mod m1), x = a2 (mod m2)
 // yields in form (x mod lcm, lcm). If impossible, yields (-1, 0)
 // prereq: lcm(m1, m2) is in Long; m1, m2 > 0
@@ -64,26 +68,25 @@ inline fun <R> crt(a1: Long, m1: Long, a2: Long, m2: Long, yield: (x: Long, lcm:
     @Suppress("NAME_SHADOWING") val a1 = a1 modulo m1
     @Suppress("NAME_SHADOWING") val a2 = a2 modulo m2
 
-    val g = gcd(m1, m2)
-    val r = a1 % g
-    if(r != a2 % g) return yield(-1, 0)
-    val p1 = m1 / g
-    val p2 = m2 / g
-    val b1 = a1 / g
-    val b2 = a2 / g
+    m1.xgcd(m2) { pi, g ->
+        val r = a1 % g
+        if(r != a2 % g) return yield(-1, 0)
+        val p1 = m1 / g
+        val p2 = m2 / g
+        val b1 = a1 / g
+        val b2 = a2 / g
 
-    val pi = p1.modInv(p2)
-    val x = ((b2 - b1) * pi modulo p2) * p1 + b1
-    return yield(x*g+r, p1*p2*g)
+        val x = ((b2 - b1) * pi modulo p2) * p1 + b1
+        return yield(x*g+r, p1*p2*g)
+    }
 }
 
-fun crt(a1: Long, m1: Long, a2: Long, m2: Long) = crt(a1, m1, a2, m2) { x, _ -> x }
-
-inline fun Long.modInvOrElse(base: Long, default: () -> Long): Long {
+// extended Euclidean, finds x * this mod m = gcd(this, m)
+inline fun <R> Long.xgcd(m: Long, yield: (x: Long, gcd: Long) -> R): R {
     var s = 0L
     var os = 1L
-    var r = base
-    var or = modulo(base)
+    var r = m
+    var or = modulo(m)
 
     while(r != 0L) {
         val q = or / r
@@ -91,10 +94,8 @@ inline fun Long.modInvOrElse(base: Long, default: () -> Long): Long {
         os = s.also { s = os - q * s }
     }
 
-    return if(or != 1L) default()
-    else os.let { if(it >= 0) it else it + base }
+    if(os < 0) os += m
+    return yield(os, or)
 }
-
-fun Long.modInv(base: Long) = modInvOrElse(base) { throw ArithmeticException("$this has no inverse in modulo $base") }
 
 
