@@ -46,6 +46,25 @@ infix fun Int.modulo(mod: Int): Int = (this % mod).let { (it shr Int.SIZE_BITS -
 infix fun Long.modulo(mod: Long) = (this % mod).let { (it shr Long.SIZE_BITS - 1 and mod) + it }
 infix fun Long.modulo(mod: Int) = modulo(mod.toLong()).toInt()
 
+fun Int.mulMod(other: Int, mod: Int) = toLong() * other modulo mod
+
+fun Int.powMod(exponent: Long, mod: Int): Int {
+    if(exponent < 0) error("Inverse not implemented")
+    var res = 1L
+    var e = exponent
+    var b = modulo(mod).toLong()
+
+    while(e > 0) {
+        if(e and 1 == 1L) {
+            res = res * b % mod
+        }
+        e = e shr 1
+        b = b * b % mod
+    }
+    return res.toInt()
+}
+fun Int.powMod(exponent: Int, mod: Int) = powMod(exponent.toLong(), mod)
+
 infix fun Int.divCeil(other: Int) =
     (this / other).let { if(xor(other) >= 0 && it * other != this) it+1 else it }
 
