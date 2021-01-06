@@ -11,7 +11,7 @@ fun main() {
     val foods = input.lines().map { ln ->
         val split = ln.split(" (contains ")
         val ingredients = split[0].split(' ')
-        val allergens = if(split.size == 1) emptyList() else split[1].dropLast(1).split(", ")
+        val allergens = split[1].dropLast(1).split(", ")
 
         Food(ingredients, allergens)
     }
