@@ -18,7 +18,6 @@ fun main() {
                 val b = in_.getOrElse(i + 1) { in_[0] }
 
                 nx[a] = b
-                pr[b] = a
             }
 
             simulate(100)
@@ -47,13 +46,11 @@ fun main() {
             val b = in_.getOrElse(i+1) { m+1 }
 
             nx[a] = b
-            pr[b] = a
         }
         for(i in m+1 .. n) {
             val b = if(i < n) i + 1 else in_[0]
 
             nx[i] = b
-            pr[b] = i
         }
 
         simulate(1e7.toInt())
@@ -66,7 +63,6 @@ fun main() {
 }
 
 class CrabCup(val n: Int, var curr: Int) {
-    val pr = IntArray(n + 1)
     val nx = IntArray(n + 1)
 
     fun simulate(rounds: Int) {
@@ -78,7 +74,6 @@ class CrabCup(val n: Int, var curr: Int) {
 
             var next = nx[pick[2]]
             nx[curr] = next
-            pr[next] = curr
 
             var dest = curr - 1
             while (true) {
@@ -89,9 +84,7 @@ class CrabCup(val n: Int, var curr: Int) {
 
             next = nx[dest]
             nx[dest] = pick[0]
-            pr[pick[0]] = dest
             nx[pick[2]] = next
-            pr[next] = pick[2]
 
             curr = nx[curr]
         }
