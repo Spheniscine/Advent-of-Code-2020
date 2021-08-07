@@ -29,7 +29,11 @@ data class Vec3(val x: Int, val y: Int, val z: Int) {
         else -> throw IndexOutOfBoundsException()
     }
 
-    override fun hashCode(): Int = hash(x.bitConcat(y), z.toLong()).toInt()
+    override fun hashCode(): Int = sipHasher.run {
+        init()
+        acc(x); acc(y); acc(z)
+        finish()
+    }
 }
 
 operator fun <V> Map<Vec3, V>.get(x: Int, y: Int, z: Int) = get(Vec3(x, y, z))

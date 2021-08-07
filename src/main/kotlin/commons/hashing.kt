@@ -1,32 +1,36 @@
 package commons
 
 import kotlin.random.Random
+import kotlin.math.*
 
-val _seed1 = Random.nextLong()
 
 /** splitmix64 pseudorandom permutation iterator, useful for custom hashing */
 fun splitmix64(seed: Long): Long {
-    var x = seed * -7046029254386353131
+    var x = seed // * -7046029254386353131
     x = (x xor (x ushr 30)) * -4658895280553007687
     x = (x xor (x ushr 27)) * -7723592293110705685
     return (x xor (x ushr 31))
 }
-fun Long.hash() = splitmix64(_seed1 xor this)
+@JvmField val nonce64 = Random.nextLong()
+@JvmField val gamma64 = Random.nextLong() or 1
+fun Long.hash() = splitmix64(this * gamma64 + nonce64)
 
-fun hash(a: Long, b: Long) = splitmix64(a.hash().xor(b))
+fun hash(a: Long, b: Long) = a.hash().xor(b).hash()
 
+/** 32-bit variant, useful for mapping Int -> Int https://nullprogram.com/blog/2018/07/31/ */
 fun splitmix32(seed: Int): Int {
-    var x = seed * 0x9e3779b9.toInt()
+    var x = seed // * 0x9e3779b9.toInt()
     x = (x xor (x ushr 16)) * 0x7feb352d
     x = (x xor (x ushr 15)) * 0x846ca68b.toInt()
     return (x xor (x ushr 16))
 }
-@JvmField val nonce32 = _seed1.toInt()
-fun Int.hash() = splitmix32(nonce32 xor this)
+@JvmField val nonce32 = nonce64.toInt()
+@JvmField val gamma32 = gamma64.toInt()
+fun Int.hash() = splitmix32(this * gamma32 * nonce32)
 
 private inline infix fun Int.rol(dist: Int) = shl(dist) or ushr(-dist)
 val sipHasher by lazy { HalfSipHash() }
-class HalfSipHash(val k0: Int = _seed1.toInt(), val k1: Int = _seed1.shr(32).toInt()) {
+class HalfSipHash(val k0: Int = Random.nextInt(), val k1: Int = Random.nextInt()) {
     private var v0 = 0
     private var v1 = 0
     private var v2 = 0
@@ -52,19 +56,18 @@ class HalfSipHash(val k0: Int = _seed1.toInt(), val k1: Int = _seed1.shr(32).toI
         acc(m.shr(32).toInt())
     }
 
-    private inline fun ByteArray.getOrFF(i: Int) = if(i < size) get(i).toInt() and 0xff else 0xff
-
     fun acc(input: String) {
-        val bytes = input.toByteArray()
-        val len = bytes.size
-        for (i in 0 until len step 4) {
-            val int = (bytes[i].toInt() shl 24
-                    or (bytes.getOrFF(i+1) shl 16)
-                    or (bytes.getOrFF(i+2) shl 8)
-                    or bytes.getOrFF(i+3))
-            acc(int)
+        val len = input.length
+        var m = 0
+        for (i in 0 until len) {
+            m = m or (input[i].toInt() shl 8*i)
+            if(i and 3 == 3) {
+                acc(m)
+                m = 0
+            }
         }
-        comma()
+        m = m or (len shl 24)
+        acc(m)
     }
 
     fun comma() {
@@ -87,114 +90,394 @@ class HalfSipHash(val k0: Int = _seed1.toInt(), val k1: Int = _seed1.shr(32).toI
         return h.toLong().shl(32) or (v1 xor v3).toLong().and(0xffff_ffff)
     }
 
-    inline fun doHash(block: HalfSipHash.() -> Unit): Int {
+    inline fun doHash(block: HalfSipHash.() -> Unit): Long {
         init()
         block()
-        return finish()
+        return finishLong()
     }
 
-    fun hash(input: IntArray): Int {
-        init()
-        for (m in input) acc(m)
-        comma()
-        return finish()
-    }
-
-    fun hash(input: LongArray): Int {
-        init()
-        for (m in input) acc(m)
-        comma()
-        return finish()
-    }
-
-    fun hash(input: String): Int {
+    fun hash(input: String): Long {
         init()
         acc(input)
-        return finish()
+        return finishLong()
     }
 }
 
-abstract class WrappedKeyMap<K, W, V>(val _del: MutableMap<W, V> = HashMap()): AbstractMutableMap<K, V>() {
-    abstract fun wrap(key: K): W
-    abstract fun unwrap(key: W): K
+interface HashingStrategy<K> {
+    fun hash(key: K): Long
+    fun equals(a: K, b: K): Boolean
+}
+inline fun <K> HashingStrategy(crossinline hash: (K) -> Long,
+                               crossinline equals: (K, K) -> Boolean) =
+    object: HashingStrategy<K> {
+        override fun hash(key: K) = hash(key)
+        override fun equals(a: K, b: K) = equals(a, b)
+    }
+inline fun <K> HashingStrategy(crossinline hash: (K) -> Long) = HashingStrategy(hash) { a, b -> a == b }
 
-    override val entries: MutableSet<MutableMap.MutableEntry<K, V>>
-            by lazy {
-                object: AbstractMutableSet<MutableMap.MutableEntry<K, V>>() {
-                    override val size
-                        get() = _del.size
+@Suppress("UNCHECKED_CAST")
+class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, val linked: Boolean = false): AbstractMutableMap<K, V>() {
+    companion object {
+        private const val REBUILD_LENGTH_THRESHOLD = 32
+        private const val FREE: Byte = 0
+        private const val REMOVED: Byte = 1
+        private const val FILLED: Byte = 2
+    }
 
-                    override fun add(element: MutableMap.MutableEntry<K, V>): Boolean = _del.put(wrap(element.key), element.value) != element.value
+    override var size: Int = 0
+        private set
 
-                    override fun iterator() = object: MutableIterator<MutableMap.MutableEntry<K, V>> {
-                        private val delIterator = _del.iterator()
+    private lateinit var keyArr: Array<K?>
+    private lateinit var hashArr: LongArray
+    private lateinit var valArr: Array<V?>
+    private lateinit var statusArr: ByteArray
+    private var removedCount = 0
+    private var mask = 0
+    private inline val head get() = mask + 1
+    private var modCount = 0
 
-                        override fun hasNext(): Boolean = delIterator.hasNext()
+    // only initialized if linked = true
+    private lateinit var next: IntArray
+    private lateinit var prev: IntArray
 
-                        override fun next() = object: MutableMap.MutableEntry<K, V> {
-                            private val delEntry = delIterator.next()
-                            override val key: K
-                                get() = unwrap(delEntry.key)
-                            override val value: V
-                                get() = delEntry.value
+    init {
+        require(capacity >= 0) { "Capacity must be non-negative" }
+        val length = Integer.highestOneBit(4 * max(1, capacity) - 1)
+        // Length is a power of 2 now
+        initEmptyTable(length)
+    }
 
-                            override fun setValue(newValue: V): V = delEntry.setValue(newValue)
-                        }
+    private fun initEmptyTable(length: Int) {
+        keyArr = arrayOfNulls<Any>(length) as Array<K?>
+        hashArr = LongArray(length)
+        valArr = arrayOfNulls<Any>(length) as Array<V?>
+        statusArr = ByteArray(length)
+        size = 0
+        removedCount = 0
+        mask = length - 1
 
-                        override fun remove() {
-                            delIterator.remove()
-                        }
-                    }
+        if(linked) {
+            next = IntArray(length+1).also { it[head] = head }
+            prev = IntArray(length+1).also { it[head] = head }
+        }
+    }
 
-                    override fun clear() { _del.clear() }
-                    override fun contains(element: MutableMap.MutableEntry<K, V>) =
-                        wrap(element.key).let { _del.containsKey(it) && _del[it] == element.value }
-                }
+    override fun containsKey(key: K): Boolean = containsKey(key, strategy.hash(key))
+    private fun containsKey(key: K, hash: Long): Boolean {
+        var pos = hash.toInt() and mask
+        while(statusArr[pos] != FREE) {
+            if(statusArr[pos] == FILLED && hashArr[pos] == hash && strategy.equals(keyArr[pos] as K, key)) {
+                return true
+            }
+            pos = pos + 1 and mask
+        }
+        return false
+    }
+
+
+    private inline fun iter(act: (k: K, v: V) -> Unit) {
+        if(linked) {
+            var i = next[head]
+            while(i != head) {
+                act(keyArr[i] as K, valArr[i] as V)
+                i = next[i]
+            }
+        } else {
+            for(i in keyArr.indices) {
+                if(statusArr[i] == FILLED) act(keyArr[i] as K, valArr[i] as V)
+            }
+        }
+    }
+
+    private abstract inner class MapIterator<X> : MutableIterator<X> {
+        private var i = when {
+            isEmpty() -> head
+            linked -> next[head]
+            else -> statusArr.indexOf(FILLED)
+        }
+        private var j = -1
+        private val curMods = modCount
+
+        override fun hasNext(): Boolean {
+            if(curMods != modCount) throw ConcurrentModificationException()
+            return i != head
+        }
+
+        protected abstract fun returnItem(pos: Int): X
+        override fun next(): X {
+            if(curMods != modCount) throw ConcurrentModificationException()
+            if(i == head) throw NoSuchElementException()
+            j = i
+            if(linked) i = next[i]
+            else do { i++ } while(i != head && statusArr[i] != FILLED)
+            return returnItem(j)
+        }
+
+        override fun remove() {
+            if(curMods != modCount) throw ConcurrentModificationException()
+            if(j == -1) throw IllegalStateException("Item to remove doesn't exist")
+            if(statusArr[j] == REMOVED) throw IllegalStateException("Item already removed")
+            statusArr[j] = REMOVED
+            size--
+            removedCount++
+            if(linked) {
+                next[prev[j]] = next[j]
+                prev[next[j]] = prev[j]
+            }
+        }
+    }
+
+    operator fun iterator(): MutableIterator<MutableMap.MutableEntry<K, V>> = object : MapIterator<MutableMap.MutableEntry<K, V>>() {
+        override fun returnItem(pos: Int) = object: MutableMap.MutableEntry<K, V> {
+            private inline val map get() = this@CustomHashMap
+            override val key: K = keyArr[pos] as K
+            override var value: V = valArr[pos] as V
+                private set
+
+            override fun setValue(newValue: V): V {
+                val oldValue = value
+                map[key] = newValue
+                value = newValue
+                return oldValue
             }
 
+            override fun equals(other: Any?): Boolean = other === this ||
+                    other is Map.Entry<*, *> && key == other.key && value == other.value
 
-    override val size get() = _del.size
-    override val values get() = _del.values
-    override fun clear() = _del.clear()
-    override fun containsKey(key: K) = _del.containsKey(wrap(key))
-    override fun containsValue(value: V) = _del.containsValue(value)
-    override fun get(key: K) = _del[wrap(key)]
-    override fun put(key: K, value: V): V? = _del.put(wrap(key), value)
-    override fun remove(key: K) = _del.remove(wrap(key))
-}
+            override fun hashCode(): Int = key.hashCode() xor value.hashCode()
+            override fun toString(): String = "$key=$value"
+        }
+    }
 
-open class StringHashMap<V>(_del: HashMap<Hash, V> = HashMap()) : WrappedKeyMap<String, StringHashMap.Hash, V>(_del) {
-    override fun wrap(key: String): Hash = Hash(key)
-    override fun unwrap(key: Hash): String = key.data
+    fun keyIterator(): MutableIterator<K> = object : MapIterator<K>() {
+        override fun returnItem(pos: Int): K = keyArr[pos] as K
+    }
+    fun valueIterator(): MutableIterator<V> = object : MapIterator<V>() {
+        override fun returnItem(pos: Int): V = valArr[pos] as V
+    }
 
-    class Hash(val data: String) {
-        override fun hashCode(): Int = sipHasher.hash(data)
-        override fun equals(other: Any?) =
-            other is Hash && data == other.data
+    override fun containsValue(value: V): Boolean {
+        iter { _, v ->
+            if(v == value) return true
+        }
+        return false
+    }
+
+    override fun get(key: K): V? = get(key, strategy.hash(key))
+    private fun get(key: K, hash: Long): V? {
+        var pos = hash.toInt() and mask
+        while(statusArr[pos] != FREE) {
+            if(statusArr[pos] == FILLED && hashArr[pos] == hash && strategy.equals(keyArr[pos] as K, key)) {
+                return valArr[pos]
+            }
+            pos = pos + 1 and mask
+        }
+        return null
+    }
+
+    private inner class EntrySet: AbstractMutableSet<MutableMap.MutableEntry<K, V>>() {
+        private inline val map get() = this@CustomHashMap
+        override fun add(element: MutableMap.MutableEntry<K, V>): Boolean = map.put(element.key, element.value) != element.value
+        override fun clear() = map.clear()
+        override fun iterator(): MutableIterator<MutableMap.MutableEntry<K, V>> = map.iterator()
+        override fun remove(element: MutableMap.MutableEntry<K, V>): Boolean {
+            if(contains(element)) {
+                map.remove(element.key)
+                return true
+            }
+            return false
+        }
+        override val size: Int get() = map.size
+        override fun contains(element: MutableMap.MutableEntry<K, V>): Boolean =
+            map.containsKey(element.key) && map[element.key] == element.value
+    }
+    override val entries: MutableSet<MutableMap.MutableEntry<K, V>> by lazy { EntrySet() }
+    private inner class KeySet : AbstractMutableSet<K>() {
+        private inline val map get() = this@CustomHashMap
+        override fun add(element: K): Boolean { throw UnsupportedOperationException() }
+        override fun clear() = map.clear()
+        override fun iterator() = map.keyIterator()
+        override fun remove(element: K): Boolean {
+            if(contains(element)) {
+                map.remove(element)
+                return true
+            }
+            return false
+        }
+        override val size: Int get() = map.size
+        override fun contains(element: K): Boolean = map.containsKey(element)
+    }
+    override val keys: MutableSet<K> by lazy { KeySet() }
+    private inner class ValueCollection: AbstractMutableCollection<V>() {
+        private inline val map get() = this@CustomHashMap
+        override val size: Int get() = map.size
+        override fun contains(element: V): Boolean = map.containsValue(element)
+        override fun add(element: V): Boolean { throw UnsupportedOperationException() }
+        override fun clear() = map.clear()
+        override fun iterator() = map.valueIterator()
+        override fun remove(element: V): Boolean {
+            iter { k, v ->
+                if(v == element) {
+                    map.remove(k)
+                    return true
+                }
+            }
+            return false
+        }
+    }
+    override val values: MutableCollection<V> by lazy { ValueCollection() }
+
+    override fun clear() {
+        modCount++
+        if(keyArr.size > REBUILD_LENGTH_THRESHOLD) {
+            initEmptyTable(REBUILD_LENGTH_THRESHOLD)
+        } else {
+            statusArr.fill(FREE)
+            size = 0
+            removedCount = 0
+            if(linked) {
+                next[head] = head
+                prev[head] = head
+            }
+        }
+    }
+
+    private fun appendEntry(i: Int) {
+        if(linked) {
+            val last = prev[head]
+            next[last] = i
+            prev[i] = last
+            next[i] = head
+            prev[head] = i
+        }
+    }
+
+    private fun rebuild(newLength: Int) {
+        val oldKeys = keyArr
+        val oldValues = valArr
+
+        if(linked) {
+            val oldNext = next
+            val oldHead = head
+            initEmptyTable(newLength)
+            var i = oldNext[oldHead]
+            while(i != oldHead) {
+                put(oldKeys[i] as K, oldValues[i] as V)
+                i = oldNext[i]
+            }
+        } else {
+            val oldStatus = statusArr
+            initEmptyTable(newLength)
+            for (i in oldKeys.indices) {
+                if (oldStatus[i] == FILLED) {
+                    put(oldKeys[i] as K, oldValues[i] as V)
+                }
+            }
+        }
+    }
+
+    override fun put(key: K, value: V): V? = put(key, value, strategy.hash(key))
+    private fun put(key: K, value: V, hash: Long): V? {
+        var pos = hash.toInt() and mask
+        while(statusArr[pos] == FILLED) {
+            if(hashArr[pos] == hash && strategy.equals(keyArr[pos] as K, key)) {
+                val oldValue = valArr[pos]
+                valArr[pos] = value
+                return oldValue
+            }
+            pos = pos + 1 and mask
+        }
+        if(statusArr[pos] == FREE) {
+            modCount++
+            statusArr[pos] = FILLED
+            keyArr[pos] = key
+            hashArr[pos] = hash
+            valArr[pos] = value
+            size++
+            appendEntry(pos)
+            if((size + removedCount) * 2 > keyArr.size) {
+                rebuild(keyArr.size * 2) // enlarge the table
+            }
+            return null
+        }
+        val removedPos = pos
+        pos = pos + 1 and mask
+        while(statusArr[pos] != FREE) {
+            if(statusArr[pos] == FILLED && hashArr[pos] == hash && strategy.equals(keyArr[pos] as K, key)) {
+                val oldValue = valArr[pos]
+                valArr[pos] = value
+                return oldValue
+            }
+            pos = pos + 1 and mask
+        }
+        modCount++
+        statusArr[removedPos] = FILLED
+        keyArr[removedPos] = key
+        hashArr[removedPos] = hash
+        valArr[removedPos] = value
+        size++
+        removedCount--
+        appendEntry(removedPos)
+        return null
+    }
+
+    override fun remove(key: K): V? = remove(key, strategy.hash(key))
+    private fun remove(key: K, hash: Long): V? {
+        var pos = hash.toInt() and mask
+        while(statusArr[pos] != FREE) {
+            if(statusArr[pos] == FILLED && hashArr[pos] == hash && strategy.equals(keyArr[pos] as K, key)) {
+                modCount++
+                val removedValue = valArr[pos]
+                statusArr[pos] = REMOVED
+                size--
+                removedCount++
+                if(linked) {
+                    next[prev[pos]] = next[pos]
+                    prev[next[pos]] = prev[pos]
+                }
+                if(keyArr.size > REBUILD_LENGTH_THRESHOLD) {
+                    if(8 * size <= keyArr.size) {
+                        rebuild(keyArr.size / 2)
+                    } else if(size < removedCount) {
+                        rebuild(keyArr.size)
+                    }
+                }
+                return removedValue
+            }
+            pos = pos + 1 and mask
+        }
+        return null
+    }
+
+    override fun toString(): String {
+        val sb = StringBuilder()
+        sb.append('{')
+        iter { k, v ->
+            if(sb.length > 1) sb.append(", ")
+            sb.append(k)
+            sb.append('=')
+            sb.append(v)
+        }
+        sb.append('}')
+        return sb.toString()
     }
 }
 
-open class LongHashMap<V>(_del: HashMap<Hash, V> = HashMap()) : WrappedKeyMap<Long, LongHashMap.Hash, V>(_del) {
-    override fun wrap(key: Long): Hash = Hash(key)
-    override fun unwrap(key: Hash): Long = key.data
+class CustomHashSet<E>(val strategy: HashingStrategy<E>, capacity: Int = 8, val linked: Boolean = false):
+    MapBackedSet<E>(CustomHashMap(strategy, capacity, linked))
 
-    class Hash(val data: Long) {
-        override fun hashCode(): Int = data.hash().toInt()
-        override fun equals(other: Any?) =
-            other is Hash && data == other.data
+//val STRING_HASHING_STRATEGY = HashingStrategy<String> { k -> k.hash() }
+
+val STRING_HASHING_STRATEGY = HashingStrategy<String> { k ->
+    sipHasher.run {
+        init()
+        acc(k)
+        finishLong()
     }
 }
 
-open class IntHashMap<V>(_del: HashMap<Hash, V> = HashMap()) : WrappedKeyMap<Int, IntHashMap.Hash, V>(_del) {
-    override fun wrap(key: Int): Hash = Hash(key)
-    override fun unwrap(key: Hash): Int = key.data
-
-    class Hash(val data: Int) {
-        override fun hashCode(): Int = data.hash()
-        override fun equals(other: Any?) =
-            other is Hash && data == other.data
-    }
-}
+fun <V> StringHashMap(linked: Boolean = false) = CustomHashMap<String, V>(STRING_HASHING_STRATEGY, linked = linked)
+fun StringHashSet(linked: Boolean = false) = CustomHashSet(STRING_HASHING_STRATEGY, linked = linked)
 
 abstract class MapBackedSet<T>(val _map: MutableMap<T, Unit>): AbstractMutableSet<T>() {
     override val size: Int get() = _map.size
@@ -202,16 +485,6 @@ abstract class MapBackedSet<T>(val _map: MutableMap<T, Unit>): AbstractMutableSe
     override fun remove(element: T): Boolean = _map.remove(element) == Unit
     override fun clear() { _map.clear() }
     override fun contains(element: T) = _map.containsKey(element)
-    override fun iterator() = object: MutableIterator<T> {
-        val mapIterator = _map.iterator()
-        override fun hasNext(): Boolean = mapIterator.hasNext()
-        override fun next(): T = mapIterator.next().key
-        override fun remove() = mapIterator.remove()
-    }
+    override fun iterator() = _map.keys.iterator()
 }
 
-open class StringHashSet(_map: MutableMap<String, Unit> = StringHashMap()): MapBackedSet<String>(_map)
-
-open class LongHashSet(_map: MutableMap<Long, Unit> = LongHashMap()): MapBackedSet<Long>(_map)
-
-open class IntHashSet(_map: MutableMap<Int, Unit> = IntHashMap()): MapBackedSet<Int>(_map)

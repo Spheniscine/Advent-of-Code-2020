@@ -73,5 +73,9 @@ fun Set<Vec4>.next(): Set<Vec4> {
 
 @Suppress("EqualsOrHashCode")
 data class Vec4(val x: Int, val y: Int, val z: Int, val w: Int) {
-    override fun hashCode(): Int = hash(x.bitConcat(y), z.bitConcat(w)).toInt()
+    override fun hashCode(): Int = sipHasher.run {
+        init()
+        acc(x); acc(y); acc(z); acc(w)
+        finish()
+    }
 }

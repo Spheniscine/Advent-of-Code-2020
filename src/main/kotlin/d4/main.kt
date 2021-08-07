@@ -12,7 +12,7 @@ fun main() {
     val whitespace = Regex("""\s+""")
 
     val A = input.split("\n\n").map { s ->
-        val res = mutableMapOf<String, String>()
+        val res = StringHashMap<String>()
         val entries = s.split(whitespace).map { it.split(':') }
 
         for((k, v) in entries) res[k] = v
@@ -32,7 +32,8 @@ fun main() {
 
     val hclRegex = Regex("""^#[0-9a-f]{6}$""")
     val pidRegex = Regex("""^\d{9}$""")
-    val eclSet = setOf("amb", "blu", "brn", "gry", "grn", "hzl", "oth")
+    val eclSet = StringHashSet()
+    eclSet.addAll(arrayOf("amb", "blu", "brn", "gry", "grn", "hzl", "oth"))
     val ans2 = valid1.count { e ->
         e["byr"]!!.validateNumString(1920, 2002) &&
                 e["iyr"]!!.validateNumString(2010, 2020) &&

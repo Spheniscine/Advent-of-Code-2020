@@ -9,7 +9,7 @@ fun main() {
     println("--- Day 7: Handy Haversacks ---")
     markTime()
 
-    val bags = HashMap<String, Bag>().autoPut { Bag(it) }
+    val bags = StringHashMap<Bag>().autoPut { Bag(it) }
     val contentRegex = Regex("""(\d+) (.+?) bags?[,.]""")
 
     for(line in input.lines()) {

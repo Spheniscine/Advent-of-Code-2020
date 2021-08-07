@@ -39,20 +39,13 @@ fun main() {
     val players = playerDecks.map { it.toCollection(ArrayDeque()) }
 
     fun List<ArrayDeque<Int>>.recurse(): Int {
-        val states = HashSet<Long>()
+        //val states = HashSet<Long>()
+        val states = CustomHashSet(STATE_HASHING_STRATEGY)
 
         while (this.all { it.isNotEmpty() }) {
-            val state = with(sipHasher) {
-                init()
-                for(player in this@recurse) {
-                    for(card in player) acc(card)
-                    comma()
-                }
-                finishLong()
-            }
+            val state = map { it.toList() }
 
-            if(!states.add(state))
-                return 0
+            if(!states.add(state)) return 0
 
             val roundWinner = if(this.all { it.first() < it.size }) {
                 val newDecks = map { player ->
@@ -81,4 +74,18 @@ fun main() {
 
     println("Part 2: $ans2")
     printTime()
+}
+
+typealias State = List<List<Int>>
+val STATE_HASHING_STRATEGY by lazy {
+    HashingStrategy<State> { state ->
+        with(sipHasher) {
+            init()
+            for(player in state) {
+                for(card in player) acc(card)
+                comma()
+            }
+            finishLong()
+        }
+    }
 }

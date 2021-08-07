@@ -64,6 +64,8 @@ fun main() {
 
             P[prefixSum] = i+1
         }
+
+        -1L
     }
 
     println("Part 2: $ans2")

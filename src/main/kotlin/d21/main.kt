@@ -18,8 +18,8 @@ fun main() {
 
     require(foods.size <= 64) { "too many foods for bitfield" }
 
-    val ingredientMasks = HashMap<String, Long>().default(0L)
-    val allergenMasks = HashMap<String, Long>().default(0L)
+    val ingredientMasks = StringHashMap<Long>().default(0L)
+    val allergenMasks = StringHashMap<Long>().default(0L)
 
     for(i in foods.indices) {
         for(e in foods[i].ingredients) {
@@ -49,9 +49,9 @@ fun main() {
     markTime()
 
 
-    val poss = allergenIngredients.associateWithTo(mutableMapOf()) { ing ->
+    val poss = allergenIngredients.associateWithTo(StringHashMap()) { ing ->
         val ingm = ingredientMasks[ing]
-        val res = mutableSetOf<String>()
+        val res = StringHashSet()
         for((alls, allm) in allergenMasks) {
             if(ingm or allm == ingm) res.add(alls)
         }
@@ -62,10 +62,10 @@ fun main() {
     val dangerous = mutableListOf<Pair<String, String>>()
 
     while(poss.isNotEmpty()) {
-        val entry = poss.entries.first { it.value.size == 1 }
-        poss.remove(entry.key)
-        val allergen = entry.value.first()
-        dangerous.add(entry.key to allergen)
+        val (key, value) = poss.entries.first { it.value.size == 1 }
+        poss.remove(key)
+        val allergen = value.first()
+        dangerous.add(key to allergen)
 
         for(v in poss.values) v.remove(allergen)
     }
