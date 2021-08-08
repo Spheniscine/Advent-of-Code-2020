@@ -251,6 +251,7 @@ class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, v
 
     private fun rebuild(newLength: Int) {
         val oldArr = arr
+        val oldSize = size
 
         if(linked) {
             val oldNext = next
@@ -267,6 +268,8 @@ class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, v
                 if(entry != null) reinsert(entry)
             }
         }
+
+        size = oldSize
     }
 
     /** only use in rebuild */
@@ -275,7 +278,6 @@ class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, v
         while(statusArr[pos] == FILLED) pos = pos + 1 and mask
         statusArr[pos] = FILLED
         arr[pos] = entry
-        size++
         appendEntry(pos)
     }
 
