@@ -228,6 +228,7 @@ class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, v
         if(arr.size > REBUILD_LENGTH_THRESHOLD) {
             initEmptyTable(REBUILD_LENGTH_THRESHOLD)
         } else {
+            arr.fill(null)
             statusArr.fill(FREE)
             size = 0
             removedCount = 0
