@@ -1,5 +1,6 @@
 package commons
 
+import java.lang.ref.WeakReference
 import kotlin.math.*
 
 interface HashingStrategy<K> {
@@ -9,7 +10,18 @@ interface HashingStrategy<K> {
 inline fun <K> HashingStrategy(crossinline hash: (K) -> Long,
                                crossinline equals: (K, K) -> Boolean) =
     object: HashingStrategy<K> {
-        override fun hash(key: K) = hash(key)
+        // keep last hash to minimize need for rehashing
+        private var hasLast = false
+        private var lastKey: K? = null
+        private var lastHash = 0L
+
+        override fun hash(key: K): Long {
+            if(hasLast && key === lastKey) return lastHash
+            hasLast = true
+            lastKey = key
+            lastHash = hash(key)
+            return lastHash
+        }
         override fun equals(a: K, b: K) = equals(a, b)
     }
 inline fun <K> HashingStrategy(crossinline hash: (K) -> Long) = HashingStrategy(hash) { a, b -> a == b }
