@@ -26,7 +26,7 @@ inline fun <K> HashingStrategy(crossinline hash: (K) -> Long,
 inline fun <K> HashingStrategy(crossinline hash: (K) -> Long) = HashingStrategy(hash) { a, b -> a == b }
 
 
-class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, val linked: Boolean = false): AbstractMutableMap<K, V>() {
+class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 16, val linked: Boolean = false): AbstractMutableMap<K, V>() {
     companion object {
         private const val REBUILD_LENGTH_THRESHOLD = 32
         private const val FREE: Byte = 0
@@ -396,7 +396,7 @@ class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, v
     }
 }
 
-class CustomHashSet<E>(val strategy: HashingStrategy<E>, capacity: Int = 8, val linked: Boolean = false):
+class CustomHashSet<E>(val strategy: HashingStrategy<E>, capacity: Int = 16, val linked: Boolean = false):
     MapBackedSet<E>(CustomHashMap(strategy, capacity, linked))
 
 //val STRING_HASHING_STRATEGY = HashingStrategy<String> { k -> k.hash() }

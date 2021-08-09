@@ -82,7 +82,7 @@ inline operator fun LongIntMap.contains(key: Long) = containsKey(key)
 class _Ez_Long__Int_HashMap(capacity: Int = DEFAULT_CAPACITY, val nullValue: Int = 0) :
     _Ez_Long__Int_Map {
     companion object {
-        private const val DEFAULT_CAPACITY = 8
+        private const val DEFAULT_CAPACITY = 16
         // There are three invariants for size, removedCount and arraysLength:
 // 1. size + removedCount <= 1/2 arraysLength
 // 2. size > 1/8 arraysLength
