@@ -326,7 +326,8 @@ class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, v
             modCount++
             addEntry(Entry(key, hash, value), pos)
             if ((size + removedCount) * 2 > arr.size) {
-                rebuild(arr.size * 2) // enlarge the table
+                if(size > removedCount) rebuild(arr.size * 2) // enlarge the table
+                else rebuild(arr.size)
             }
             return null
         }
@@ -358,9 +359,9 @@ class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, v
                     if (arr.size > REBUILD_LENGTH_THRESHOLD) {
                         if (8 * size <= arr.size) {
                             rebuild(arr.size / 2)
-                        } else if (size < removedCount) {
-                            rebuild(arr.size)
-                        }
+                        } //else if (size < removedCount) {
+//                            rebuild(arr.size)
+//                        }
                     }
                     return entry.value
                 }

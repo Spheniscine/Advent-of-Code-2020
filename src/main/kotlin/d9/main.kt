@@ -178,7 +178,8 @@ class _Ez_Long__Int_HashMap(capacity: Int = DEFAULT_CAPACITY, val nullValue: Int
             values[pos] = value
             size++
             if ((size + removedCount) * 2 > keys.size) {
-                rebuild(keys.size * 2) // enlarge the table
+                if(size > removedCount) rebuild(keys.size * 2) // enlarge the table
+                else rebuild(keys.size)
             }
             return nullValue
         }
@@ -214,9 +215,9 @@ class _Ez_Long__Int_HashMap(capacity: Int = DEFAULT_CAPACITY, val nullValue: Int
                 if (keys.size > REBUILD_LENGTH_THRESHOLD) {
                     if (8 * size <= keys.size) {
                         rebuild(keys.size / 2) // compress the table
-                    } else if (size < removedCount) {
-                        rebuild(keys.size) // just rebuild the table
-                    }
+                    } // else if (size < removedCount) {
+//                        rebuild(keys.size) // just rebuild the table
+//                    }
                 }
                 return removedValue
             }
