@@ -18,7 +18,7 @@ fun main() {
     val ans1 = run ans@{
         val cnt = LongIntMap()
         for (i in 1 until preambleLength) {
-            for (j in i - 1 downTo 0) {
+            for (j in 0 until i) {
                 cnt[A[i] + A[j]]++
             }
         }
@@ -178,7 +178,7 @@ class _Ez_Long__Int_HashMap(capacity: Int = DEFAULT_CAPACITY, val nullValue: Int
             values[pos] = value
             size++
             if ((size + removedCount) * 2 > keys.size) {
-                if(size > removedCount) rebuild(keys.size * 2) // enlarge the table
+                if(size * 3 > keys.size) rebuild(keys.size * 2) // enlarge the table
                 else rebuild(keys.size)
             }
             return nullValue
