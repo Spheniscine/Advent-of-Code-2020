@@ -25,7 +25,8 @@ fun main() {
 
         for (i in preambleLength until n) {
             var a = A[i]
-            if(cnt[a] == 0) return@ans a
+            if(cnt[a] == 0)
+                return@ans a
 
             for(j in i - preambleLength + 1 until i) {
                 val b = a + A[j]
@@ -78,7 +79,7 @@ typealias LongIntMap = _Ez_Long__Int_HashMap
 inline operator fun LongIntMap.set(key: Long, value: Int) { put(key, value) }
 inline operator fun LongIntMap.contains(key: Long) = containsKey(key)
 
-class _Ez_Long__Int_HashMap(capacity: Int = DEFAULT_CAPACITY, val nullValue: Int = DEFAULT_NULL_VALUE) :
+class _Ez_Long__Int_HashMap(capacity: Int = DEFAULT_CAPACITY, val nullValue: Int = 0) :
     _Ez_Long__Int_Map {
     companion object {
         private const val DEFAULT_CAPACITY = 8
@@ -94,8 +95,15 @@ class _Ez_Long__Int_HashMap(capacity: Int = DEFAULT_CAPACITY, val nullValue: Int
         private const val FREE: Byte = 0
         private const val REMOVED: Byte = 1
         private const val FILLED: Byte = 2
-        private const  val   DEFAULT_NULL_VALUE = 0
         private val hashSeed = Random.nextLong()
+        private val gamma = Random.nextLong() or 1
+    }
+
+    private fun getStartPos(h: Long): Int {
+        var x = h * gamma + hashSeed
+        x = (x xor (x ushr 30)) * -4658895280553007687
+        x = (x xor (x ushr 27)) * -7723592293110705685
+        return (x xor (x ushr 31)).toInt() and mask
     }
 
     private lateinit   var keys: LongArray
@@ -120,24 +128,18 @@ class _Ez_Long__Int_HashMap(capacity: Int = DEFAULT_CAPACITY, val nullValue: Int
         }
     }
 
-    private fun getStartPos(h: Long): Int {
-        var x = (h xor hashSeed) * -7046029254386353131
-        x = (x xor (x ushr 30)) * -4658895280553007687
-        x = (x xor (x ushr 27)) * -7723592293110705685
-        return (x xor (x ushr 31)).toInt() and mask
-    }
-
     override fun isEmpty(): Boolean = size == 0
 
     override fun containsKey(
         key: Long
     ): Boolean {
         var pos = getStartPos(key)
+        var step = 0
         while (status[pos] != FREE) {
             if (status[pos] == FILLED && keys[pos] == key) {
                 return true
             }
-            pos = pos + 1 and mask
+            pos = pos + ++step and mask
         }
         return false
     }
@@ -146,11 +148,12 @@ class _Ez_Long__Int_HashMap(capacity: Int = DEFAULT_CAPACITY, val nullValue: Int
         key: Long
     ): Int {
         var pos = getStartPos(key)
+        var step = 0
         while (status[pos] != FREE) {
             if (status[pos] == FILLED && keys[pos] == key) {
                 return values[pos]
             }
-            pos = pos + 1 and mask
+            pos = pos + ++step and mask
         }
         return nullValue
     }
@@ -160,13 +163,14 @@ class _Ez_Long__Int_HashMap(capacity: Int = DEFAULT_CAPACITY, val nullValue: Int
         value: Int
     ): Int {
         var pos = getStartPos(key)
+        var step = 0
         while (status[pos] == FILLED) {
             if (keys[pos] == key) {
                 val   oldValue = values[pos]
                 values[pos] = value
                 return oldValue
             }
-            pos = pos + 1 and mask
+            pos = pos + ++step and mask
         }
         if (status[pos] == FREE) {
             status[pos] = FILLED
@@ -179,14 +183,14 @@ class _Ez_Long__Int_HashMap(capacity: Int = DEFAULT_CAPACITY, val nullValue: Int
             return nullValue
         }
         val removedPos = pos
-        pos = pos + 1 and mask
+        pos = pos + ++step and mask
         while (status[pos] != FREE) {
             if (status[pos] == FILLED && keys[pos] == key) {
                 val   oldValue = values[pos]
                 values[pos] = value
                 return oldValue
             }
-            pos = pos + 1 and mask
+            pos = pos + ++step and mask
         }
         status[removedPos] = FILLED
         keys[removedPos] = key
@@ -200,6 +204,7 @@ class _Ez_Long__Int_HashMap(capacity: Int = DEFAULT_CAPACITY, val nullValue: Int
         key: Long
     ): Int {
         var pos = getStartPos(key)
+        var step = 0
         while (status[pos] != FREE) {
             if (status[pos] == FILLED && keys[pos] == key) {
                 val   removedValue = values[pos]
@@ -215,7 +220,7 @@ class _Ez_Long__Int_HashMap(capacity: Int = DEFAULT_CAPACITY, val nullValue: Int
                 }
                 return removedValue
             }
-            pos = pos + 1 and mask
+            pos = pos + ++step and mask
         }
         return nullValue
     }

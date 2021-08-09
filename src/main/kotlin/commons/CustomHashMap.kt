@@ -25,7 +25,7 @@ inline fun <K> HashingStrategy(crossinline hash: (K) -> Long,
     }
 inline fun <K> HashingStrategy(crossinline hash: (K) -> Long) = HashingStrategy(hash) { a, b -> a == b }
 
-@Suppress("UNCHECKED_CAST")
+
 class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, val linked: Boolean = false): AbstractMutableMap<K, V>() {
     companion object {
         private const val REBUILD_LENGTH_THRESHOLD = 32
@@ -91,11 +91,12 @@ class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, v
     override fun containsKey(key: K): Boolean = containsKey(key, strategy.hash(key))
     private fun containsKey(key: K, hash: Long): Boolean {
         var pos = hash.toInt() and mask
+        var step = 0
         while (statusArr[pos] != FREE) {
             if (statusArr[pos] == FILLED && arr[pos]!!.matches(key, hash)) {
                 return true
             }
-            pos = pos + 1 and mask
+            pos = pos + ++step and mask
         }
         return false
     }
@@ -175,11 +176,12 @@ class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, v
     override fun get(key: K): V? = get(key, strategy.hash(key))
     private fun get(key: K, hash: Long): V? {
         var pos = hash.toInt() and mask
+        var step = 0
         while (statusArr[pos] != FREE) {
             arr[pos]?.let { entry ->
                 if (entry.matches(key, hash)) return entry.value
             }
-            pos = pos + 1 and mask
+            pos = pos + ++step and mask
         }
         return null
     }
@@ -290,7 +292,8 @@ class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, v
     /** only use in rebuild */
     private fun reinsert(entry: Entry) {
         var pos = entry.hash.toInt() and mask
-        while (statusArr[pos] == FILLED) pos = pos + 1 and mask
+        var step = 0
+        while (statusArr[pos] == FILLED) pos = pos + ++step and mask
         addEntry(entry, pos)
     }
 
@@ -310,13 +313,14 @@ class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, v
     override fun put(key: K, value: V): V? = put(key, value, strategy.hash(key))
     private fun put(key: K, value: V, hash: Long): V? {
         var pos = hash.toInt() and mask
+        var step = 0
         while (statusArr[pos] == FILLED) {
             arr[pos]?.let { entry ->
                 if (entry.matches(key, hash)) {
                     return entry.setValue(value)
                 }
             }
-            pos = pos + 1 and mask
+            pos = pos + ++step and mask
         }
         if (statusArr[pos] == FREE) {
             modCount++
@@ -327,14 +331,14 @@ class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, v
             return null
         }
         val removedPos = pos
-        pos = pos + 1 and mask
+        pos = pos + ++step and mask
         while (statusArr[pos] != FREE) {
             arr[pos]?.let { entry ->
                 if (entry.matches(key, hash)) {
                     return entry.setValue(value)
                 }
             }
-            pos = pos + 1 and mask
+            pos = pos + ++step and mask
         }
         modCount++
         addEntry(Entry(key, hash, value), removedPos)
@@ -345,6 +349,7 @@ class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, v
     override fun remove(key: K): V? = remove(key, strategy.hash(key))
     private fun remove(key: K, hash: Long): V? {
         var pos = hash.toInt() and mask
+        var step = 0
         while (statusArr[pos] != FREE) {
             arr[pos]?.let { entry ->
                 if (entry.matches(key, hash)) {
@@ -360,7 +365,7 @@ class CustomHashMap<K, V>(val strategy: HashingStrategy<K>, capacity: Int = 8, v
                     return entry.value
                 }
             }
-            pos = pos + 1 and mask
+            pos = pos + ++step and mask
         }
         return null
     }
